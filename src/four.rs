@@ -16,10 +16,6 @@ impl Piece {
     }
 }
 
-// 棋盘：6行7列，行0是底部，行5是顶部（方便重力计算）
-pub const ROWS: usize = 6;
-pub const COLS: usize = 7;
-
 #[derive(Resource)]
 pub struct Board {
     pub grid: [[Piece; COLS]; ROWS],
@@ -52,27 +48,22 @@ impl Board {
         if col >= COLS {
             return None;
         }
-        for row in 0..ROWS {
-            if self.grid[row][col] == Piece::None {
-                return Some(row);
-            }
-        }
-        None
+        (0..ROWS).find(|&row| self.grid[row][col] == Piece::None)
     }
     // 尝试在指定列落子，返回落子的行索引（如果成功）
-    pub fn drop_piece(&mut self, col: usize) -> Option<usize> {
-        if self.game_over || col >= COLS {
-            return None;
-        }
-        // 从底部往上找第一个空位
-        for row in 0..ROWS {
-            if self.grid[row][col] == Piece::None {
-                self.grid[row][col] = self.current_player;
-                return Some(row);
-            }
-        }
-        None // 该列已满
-    }
+    // pub fn drop_piece(&mut self, col: usize) -> Option<usize> {
+    //     if self.game_over || col >= COLS {
+    //         return None;
+    //     }
+    //     // 从底部往上找第一个空位
+    //     for row in 0..ROWS {
+    //         if self.grid[row][col] == Piece::None {
+    //             self.grid[row][col] = self.current_player;
+    //             return Some(row);
+    //         }
+    //     }
+    //     None // 该列已满
+    // }
 
     // 切换玩家
     pub fn switch_player(&mut self) {

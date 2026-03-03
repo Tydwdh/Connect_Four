@@ -1,15 +1,7 @@
 use super::*;
 #[derive(Component)]
-pub struct PieceSprite {
-    pub row: usize,
-    pub col: usize,
-}
-
-pub fn setup_board(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-) {
+pub struct PieceSprite;
+pub fn setup_board(mut commands: Commands) {
     // 绘制网格线（简单起见，画一些线段）
     let line_color = Color::WHITE;
     let thickness = 2.0;

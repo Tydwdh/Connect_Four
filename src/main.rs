@@ -5,14 +5,20 @@ mod four;
 use four::*;
 mod ui;
 use ui::*;
+mod config;
+pub use config::*;
+mod mouse;
+use mouse::*;
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .init_resource::<Board>() // 自动使用 Board::new()
+        .add_message::<SpawnPieceEvent>()
         .add_systems(Startup, (setup_camera, setup_board, setup_ui))
         .add_systems(
             Update,
             (
+                detect_board_click.run_if(not(is_falling).and(not(is_game_over))), // 条件1: 没有下落
                 mouse_click_system,
                 reset_system,
                 update_ui,
@@ -22,13 +28,9 @@ fn main() {
         )
         .run();
 }
-const BOARD_WIDTH: f32 = CELL_SIZE * COLS as f32;
-const BOARD_HEIGHT: f32 = CELL_SIZE * ROWS as f32;
-const OFFSET_X: f32 = -BOARD_WIDTH / 2.0; // 棋盘左下角 X
-const OFFSET_Y: f32 = -BOARD_HEIGHT / 2.0; // 棋盘左下角 Y
-const CELL_SIZE: f32 = 80.0;
+
 fn setup_camera(mut commands: Commands) {
-    commands.spawn(Camera2d::default());
+    commands.spawn(Camera2d);
 }
 fn board_to_world(row: usize, col: usize) -> Vec2 {
     let x = OFFSET_X + (col as f32 + 0.5) * CELL_SIZE;
@@ -39,102 +41,40 @@ fn board_to_world(row: usize, col: usize) -> Vec2 {
 fn col_to_x(col: usize) -> f32 {
     OFFSET_X + (col as f32 + 0.5) * CELL_SIZE
 }
-
-fn top_y() -> f32 {
-    OFFSET_Y + BOARD_HEIGHT + CELL_SIZE / 2.0 // 棋盘顶部上方半个格子
+fn is_falling(query: Query<&FallingPiece>) -> bool {
+    !query.is_empty()
 }
+
+fn is_game_over(board: Res<Board>) -> bool {
+    board.game_over
+}
+
 fn mouse_click_system(
-    mouse_button: Res<ButtonInput<MouseButton>>,
-    windows: Query<&Window>,
-    camera_q: Query<(&Camera, &GlobalTransform)>,
-    mut board: ResMut<Board>,
+    mut messages: MessageReader<SpawnPieceEvent>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    falling_query: Query<&FallingPiece>, // 如果有棋子正在下落，则忽略点击
 ) {
-    if !mouse_button.just_pressed(MouseButton::Left) {
-        return;
-    }
-    // 游戏结束或正在下落时不能下子
-    if board.game_over || !falling_query.is_empty() {
-        return;
-    }
-
-    let window = windows.single();
-    let (camera, camera_transform) = camera_q.single().unwrap();
-    if let Some(cursor_pos) = window.unwrap().cursor_position() {
-        if let Ok(world_pos) = camera.viewport_to_world_2d(camera_transform, cursor_pos) {
-            // 计算点击的列
-            let col = ((world_pos.x - OFFSET_X) / CELL_SIZE).floor() as usize;
-            if col >= COLS {
-                return;
-            }
-            let temp_row = ((world_pos.y - OFFSET_Y) / CELL_SIZE).floor() as usize;
-            if temp_row >= ROWS {
-                return;
-            }
-
-            // 查找该列的第一个空行
-            if let Some(row) = board.find_empty_row(col) {
-                let player = board.current_player;
-
-                // 计算下落起始位置（列顶部上方）和目标位置
-                let start_y = board_to_world(temp_row, col).y;
-                let target_y = board_to_world(row, col).y;
-
-                // 创建棋子实体（圆形）
-                let mesh = meshes.add(Circle::new(CELL_SIZE * 0.35));
-                let material = materials.add(player.color());
-
-                commands.spawn((
-                    Mesh2d(mesh),
-                    MeshMaterial2d(material),
-                    Transform::from_xyz(col_to_x(col), start_y, 1.0),
-                    PieceSprite { row, col },
-                    FallingPiece {
-                        target_y,
-                        player,
-                        row,
-                        col,
-                    },
-                ));
-                // 注意：此时棋盘尚未更新，等待动画完成后更新
-            }
-        }
+    for message in messages.read() {
+        let mesh = meshes.add(Circle::new(CELL_SIZE * 0.35));
+        let material = materials.add(message.player.color());
+        let target_y = board_to_world(message.row, message.col).y;
+        let start_y = message.world_pos_y.max(target_y);
+        commands.spawn((
+            Mesh2d(mesh),
+            MeshMaterial2d(material),
+            Transform::from_xyz(col_to_x(message.col), start_y, 1.0),
+            PieceSprite,
+            FallingPiece {
+                target_y,
+                player: message.player,
+                row: message.row,
+                col: message.col,
+            },
+        ));
     }
 }
 
-fn spawn_piece(
-    commands: &mut Commands,
-    meshes: &mut ResMut<Assets<Mesh>>,
-    materials: &mut ResMut<Assets<ColorMaterial>>,
-    row: usize,
-    col: usize,
-    player: Piece,
-) {
-    let cell_size = 80.0;
-    let board_width = cell_size * COLS as f32;
-    let board_height = cell_size * ROWS as f32;
-    let offset_x = -board_width / 2.0;
-    let offset_y = -board_height / 2.0;
-
-    let x = offset_x + (col as f32 + 0.5) * cell_size;
-    let y = offset_y + (row as f32 + 0.5) * cell_size;
-
-    let color = match player {
-        Piece::Red => Color::srgb(1.0, 0.0, 0.0),
-        Piece::Yellow => Color::srgb(1.0, 1.0, 0.0),
-        Piece::None => unreachable!(),
-    };
-
-    commands.spawn((
-        Mesh2d(meshes.add(Circle::new(cell_size * 0.35))),
-        MeshMaterial2d(materials.add(color)),
-        Transform::from_xyz(x, y, 1.0),
-        PieceSprite { row, col },
-    ));
-}
 // 标记正在下落的棋子，包含下落目标信息
 #[derive(Component)]
 struct FallingPiece {
@@ -143,7 +83,7 @@ struct FallingPiece {
     row: usize,    // 目标行
     col: usize,    // 目标列
 }
-const FALL_SPEED: f32 = 500.0;
+
 // 下落动画系统：移动下落中的棋子，到达目标后更新棋盘
 fn falling_animation_system(
     time: Res<Time>,
