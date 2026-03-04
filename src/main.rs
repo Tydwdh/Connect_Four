@@ -7,19 +7,18 @@ mod ui;
 use ui::*;
 mod config;
 pub use config::*;
-mod mouse;
-use mouse::*;
+mod game_input;
+use game_input::*;
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .init_resource::<Board>() // 自动使用 Board::new()
-        .add_message::<SpawnPieceEvent>()
-        .add_systems(Startup, (setup_camera, setup_board, setup_ui))
+        .add_plugins(GameInputPlugin)
+        .add_plugins(BoardPlugin)
+        .add_systems(Startup, (setup_camera, setup_ui))
         .add_systems(
             Update,
             (
-                detect_board_click.run_if(not(is_falling).and(not(is_game_over))), // 条件1: 没有下落
-                mouse_click_system,
+                mouse_click_system.run_if(not(is_falling).and(not(is_game_over))),
                 reset_system,
                 update_ui,
                 falling_animation_system,
@@ -50,7 +49,7 @@ fn is_game_over(board: Res<Board>) -> bool {
 }
 
 fn mouse_click_system(
-    mut messages: MessageReader<SpawnPieceEvent>,
+    mut messages: MessageReader<SpawnPieceMessage>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
@@ -119,13 +118,12 @@ fn falling_animation_system(
     }
 }
 fn reset_system(
-    keyboard: Res<ButtonInput<KeyCode>>,
     mut board: ResMut<Board>,
     mut commands: Commands,
     pieces: Query<Entity, With<PieceSprite>>,
+    mut messages: MessageReader<ClearBoardMessage>,
 ) {
-    if keyboard.just_pressed(KeyCode::Space) {
-        // 删除所有棋子实体
+    for _message in messages.read() {
         for entity in pieces.iter() {
             commands.entity(entity).despawn();
         }
