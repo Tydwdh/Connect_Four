@@ -14,6 +14,7 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugins(GameInputPlugin)
         .add_plugins(BoardPlugin)
+        .init_resource::<HighlightColumn>()
         .add_systems(Startup, (setup_camera, setup_ui))
         .add_systems(
             Update,
@@ -22,6 +23,9 @@ fn main() {
                 reset_system,
                 update_ui,
                 falling_animation_system,
+                mouse_highlight_system,
+                update_highlight_system,
+                update_preview_system,
             )
                 .chain(),
         )
@@ -39,6 +43,9 @@ fn board_to_world(row: usize, col: usize) -> Vec2 {
 
 fn col_to_x(col: usize) -> f32 {
     OFFSET_X + (col as f32 + 0.5) * CELL_SIZE
+}
+fn row_to_y(row: usize) -> f32 {
+    OFFSET_Y + (row as f32 + 0.5) * CELL_SIZE
 }
 fn is_falling(query: Query<&FallingPiece>) -> bool {
     !query.is_empty()
@@ -62,7 +69,7 @@ fn mouse_click_system(
         commands.spawn((
             Mesh2d(mesh),
             MeshMaterial2d(material),
-            Transform::from_xyz(col_to_x(message.col), start_y, 1.0),
+            Transform::from_xyz(col_to_x(message.col), start_y, 10.0),
             PieceSprite,
             FallingPiece {
                 target_y,
