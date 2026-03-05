@@ -9,23 +9,23 @@ mod config;
 pub use config::*;
 mod game_input;
 use game_input::*;
+mod falling_animation;
+use falling_animation::*;
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(GameInputPlugin)
+        .add_plugins(FourPlugin)
+        .add_plugins(FallingAnimationPlugin)
         .add_plugins(BoardPlugin)
         .init_resource::<HighlightColumn>()
         .add_systems(Startup, (setup_camera, setup_ui))
         .add_systems(
             Update,
             (
-                mouse_click_system.run_if(not(is_falling).and(not(is_game_over))),
+                place_piece.run_if(not(is_falling).and(not(is_game_over))),
                 reset_system,
                 update_ui,
-                falling_animation_system,
-                mouse_highlight_system,
-                update_highlight_system,
-                update_preview_system,
             )
                 .chain(),
         )
@@ -35,27 +35,8 @@ fn main() {
 fn setup_camera(mut commands: Commands) {
     commands.spawn(Camera2d);
 }
-fn board_to_world(row: usize, col: usize) -> Vec2 {
-    let x = OFFSET_X + (col as f32 + 0.5) * CELL_SIZE;
-    let y = OFFSET_Y + (row as f32 + 0.5) * CELL_SIZE;
-    Vec2::new(x, y)
-}
 
-fn col_to_x(col: usize) -> f32 {
-    OFFSET_X + (col as f32 + 0.5) * CELL_SIZE
-}
-fn row_to_y(row: usize) -> f32 {
-    OFFSET_Y + (row as f32 + 0.5) * CELL_SIZE
-}
-fn is_falling(query: Query<&FallingPiece>) -> bool {
-    !query.is_empty()
-}
-
-fn is_game_over(board: Res<Board>) -> bool {
-    board.game_over
-}
-
-fn mouse_click_system(
+fn place_piece(
     mut messages: MessageReader<SpawnPieceMessage>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -81,49 +62,6 @@ fn mouse_click_system(
     }
 }
 
-// 标记正在下落的棋子，包含下落目标信息
-#[derive(Component)]
-struct FallingPiece {
-    target_y: f32, // 目标 Y 坐标
-    player: Piece, // 棋子颜色
-    row: usize,    // 目标行
-    col: usize,    // 目标列
-}
-
-// 下落动画系统：移动下落中的棋子，到达目标后更新棋盘
-fn falling_animation_system(
-    time: Res<Time>,
-    mut board: ResMut<Board>,
-    mut commands: Commands,
-    mut query: Query<(Entity, &mut Transform, &FallingPiece)>,
-) {
-    for (entity, mut transform, falling) in query.iter_mut() {
-        // 向下移动delta_secs
-        transform.translation.y -= FALL_SPEED * time.delta_secs();
-
-        // 检查是否到达或超过目标
-        if transform.translation.y <= falling.target_y {
-            transform.translation.y = falling.target_y; // 精确对齐
-
-            // 更新棋盘状态
-            board.grid[falling.row][falling.col] = falling.player;
-
-            // 检查胜利/平局
-            if board.check_win(falling.row, falling.col) {
-                board.game_over = true;
-                board.winner = Some(falling.player);
-            } else if board.is_full() {
-                board.game_over = true;
-                board.winner = None;
-            } else {
-                board.switch_player();
-            }
-
-            // 移除下落组件（棋子变为静止）
-            commands.entity(entity).remove::<FallingPiece>();
-        }
-    }
-}
 fn reset_system(
     mut board: ResMut<Board>,
     mut commands: Commands,

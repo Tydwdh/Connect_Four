@@ -1,4 +1,20 @@
 use super::*;
+
+pub struct BoardPlugin;
+
+impl Plugin for BoardPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(
+            Update,
+            (
+                mouse_highlight_system,
+                update_highlight_system,
+                update_preview_system,
+            )
+                .chain(),
+        );
+    }
+}
 #[derive(Component)]
 pub struct PieceSprite;
 

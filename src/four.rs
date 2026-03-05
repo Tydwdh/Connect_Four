@@ -16,9 +16,9 @@ impl Piece {
     }
 }
 
-pub struct BoardPlugin;
+pub struct FourPlugin;
 
-impl Plugin for BoardPlugin {
+impl Plugin for FourPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Board>()
             .add_systems(Startup, setup_board);
