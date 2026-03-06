@@ -14,11 +14,10 @@ use falling_animation::*;
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(GameInputPlugin)
-        .add_plugins(FourPlugin)
-        .add_plugins(FallingAnimationPlugin)
-        .add_plugins(BoardPlugin)
-        .init_resource::<HighlightColumn>()
+        .add_plugins(GameInputPlugin) //游戏输入
+        .add_plugins(FourPlugin) //四子棋游戏
+        .add_plugins(FallingAnimationPlugin) //棋子掉落动画
+        .add_plugins(BoardPlugin) //棋盘动画
         .add_systems(Startup, (setup_camera, setup_ui))
         .add_systems(
             Update,
@@ -39,19 +38,19 @@ fn setup_camera(mut commands: Commands) {
 fn place_piece(
     mut messages: MessageReader<SpawnPieceMessage>,
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
+    assets: Res<PieceAssets>,
 ) {
     for message in messages.read() {
-        let mesh = meshes.add(Circle::new(CELL_SIZE * 0.35));
-        let material = materials.add(message.player.color());
         let target_y = board_to_world(message.row, message.col).y;
         let start_y = message.world_pos_y.max(target_y);
+        let material_handle = match message.player {
+            Piece::Yellow => assets.player1_material.clone(),
+            Piece::Red => assets.player2_material.clone(),
+            Piece::None => panic!("Invalid piece"),
+        };
         commands.spawn((
-            Mesh2d(mesh),
-            MeshMaterial2d(material),
             Transform::from_xyz(col_to_x(message.col), start_y, 10.0),
-            PieceSprite,
+            PieceBundle::new(assets.mesh.clone(), material_handle),
             FallingPiece {
                 target_y,
                 player: message.player,

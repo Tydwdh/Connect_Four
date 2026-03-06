@@ -1,26 +1,83 @@
 use super::*;
 
+/// Board 插件：负责棋盘显示、棋子放置预览和列高亮功能
 pub struct BoardPlugin;
 
 impl Plugin for BoardPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            Update,
-            (
-                mouse_highlight_system,
-                update_highlight_system,
-                update_preview_system,
-            )
-                .chain(),
-        );
+        app.init_resource::<HighlightColumn>()
+            .add_systems(Startup, setup_board)
+            .add_systems(
+                Update,
+                (
+                    mouse_highlight_system,
+                    update_highlight_system,
+                    update_preview_system,
+                )
+                    .chain(),
+            );
     }
 }
+
+// ===================================
+// 棋子相关组件和资源定义
+// ===================================
+
+/// 棋子实体 Bundle
+#[derive(Bundle)]
+pub struct PieceBundle {
+    mesh: Mesh2d,
+    material: MeshMaterial2d<ColorMaterial>,
+    sprite: PieceSprite,
+}
+
+impl PieceBundle {
+    pub fn new(mesh: Handle<Mesh>, material: Handle<ColorMaterial>) -> Self {
+        Self {
+            mesh: Mesh2d(mesh),
+            material: MeshMaterial2d(material),
+            sprite: PieceSprite,
+        }
+    }
+}
+
+/// 存储棋子资源（网格和材质）
+#[derive(Resource)]
+pub struct PieceAssets {
+    pub mesh: Handle<Mesh>, // 所有棋子共用相同的圆形网格
+    pub player1_material: Handle<ColorMaterial>,
+    pub player2_material: Handle<ColorMaterial>,
+}
+
+/// 棋子精灵组件标识
 #[derive(Component)]
 pub struct PieceSprite;
 
-// 辅助资源存储高亮实体的 ID
+// ===================================
+// 高亮列相关组件和资源定义
+// ===================================
+
+/// 存储高亮列实体 ID 的资源
 #[derive(Resource)]
 pub struct HighlightColumnEntity(pub Entity);
+
+/// 高亮列精灵组件标识
+#[derive(Component)]
+pub struct ColumnHighlight;
+
+/// 存储当前高亮列索引的资源
+#[derive(Resource, Default)]
+pub struct HighlightColumn(pub Option<usize>);
+
+/// 预览棋子组件标识
+#[derive(Component)]
+pub struct PreviewPiece;
+
+// ===================================
+// 棋盘初始化系统
+// ===================================
+
+/// 设置棋盘，包括底板、网格、高亮指示器和棋子资源
 pub fn setup_board(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -99,7 +156,9 @@ pub fn setup_board(
             Transform::from_xyz(0.0, y, 2.0),
         ));
     }
-    let highlight_color = Color::srgba(256.0, 256.0, 256.0, 0.1); // 半透明绿色
+
+    // 4. 高亮列指示器
+    let highlight_color = Color::srgba(255.0, 255.0, 255.0, 0.2);
     let highlight_height = board_height;
     let highlight_width = CELL_SIZE - 4.0; // 略小于格子宽度，避免遮挡边框
     let highlight_entity = commands
@@ -115,23 +174,33 @@ pub fn setup_board(
         ))
         .id();
     commands.insert_resource(HighlightColumnEntity(highlight_entity));
-    let preview_mesh = meshes.add(Circle::new(CELL_SIZE * 0.35));
-    let preview_material = materials.add(Color::NONE); // 初始透明，或者用默认颜色
+
+    let mesh = meshes.add(Circle::new(CELL_SIZE * 0.35));
+
+    // 创建两种颜色的材质
+    let player2_material = materials.add(Piece::Red.color()); // 假设玩家2为红色
+    let player1_material = materials.add(Piece::Yellow.color()); // 玩家1为黄色
     commands.spawn((
-        Mesh2d(preview_mesh),
-        MeshMaterial2d(preview_material),
+        Mesh2d(mesh.clone()),
+        MeshMaterial2d(player2_material.clone()),
         Transform::from_xyz(0.0, 0.0, 3.0), // Z 轴介于棋子(3)和高亮(5)之间
         Visibility::Hidden,
         PreviewPiece,
+        PieceSprite,
     ));
+    commands.insert_resource(PieceAssets {
+        mesh,
+        player1_material,
+        player2_material,
+    });
 }
 
-#[derive(Component)]
-pub struct ColumnHighlight;
+// ===================================
+// 更新系统
+// ===================================
 
-#[derive(Resource, Default)]
-pub struct HighlightColumn(pub Option<usize>);
-
+/// 更新高亮列显示系统
+/// 根据当前高亮列资源更新高亮精灵的位置和可见性
 pub fn update_highlight_system(
     highlight_col: Res<HighlightColumn>,
     highlight_entity: Res<HighlightColumnEntity>,
@@ -150,6 +219,8 @@ pub fn update_highlight_system(
     }
 }
 
+/// 鼠标高亮系统
+/// 检测鼠标位置并更新高亮列资源
 pub fn mouse_highlight_system(
     mut cursor_events: MessageReader<CursorMoved>,
     camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
@@ -192,9 +263,8 @@ pub fn mouse_highlight_system(
     *highlight_col = HighlightColumn(None);
 }
 
-#[derive(Component)]
-pub struct PreviewPiece;
-
+/// 更新预览棋子系统
+/// 根据当前高亮列和游戏状态更新预览棋子的位置、颜色和可见性
 pub fn update_preview_system(
     highlight_col: Res<HighlightColumn>,
     board: Res<Board>,

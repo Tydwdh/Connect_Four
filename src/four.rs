@@ -20,8 +20,8 @@ pub struct FourPlugin;
 
 impl Plugin for FourPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Board>()
-            .add_systems(Startup, setup_board);
+        app.init_resource::<Board>();
+        // .add_systems(Startup, setup_board);
     }
 }
 
